@@ -1,0 +1,203 @@
+---
+title: "lab10"
+author: "Claire Madden"
+date: "3/24/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE,
+                      warning = FALSE)
+
+library(tidyverse)
+library(here)
+
+library(DBI)
+library(RSQLite)
+
+```
+
+
+### Connect to a database, and tell R we are using SQLite:
+```{r}
+
+#establish connection to the database
+# drv = driver, dbname = database name
+lter_db <- DBI::dbConnect(drv = RSQLite::SQLite(),
+                          dbname = here("data", "marine.sqlite"))
+
+
+
+```
+
+
+### What tables exist in the database?
+To check which tables exist (table names) in a database, use 'DBI::dbListTables()'
+
+```{r}
+
+DBI::dbListTables(lter_db)
+
+```
+
+### Which variables are in a database table?
+Use 'DBI::dbListFields'
+
+```{r}
+
+DBI::dbListFields(lter_db, "fish_data")
+
+
+```
+
+```{r}
+
+DBI::dbListFields(lter_db, "inverts_data")
+
+```
+
+
+```{r}
+
+DBI::dbListFields(lter_db, "lobsters_data")
+
+```
+
+#### Read in a database table as an R dataframe!
+
+Use 'DBI::dbReadTable()'
+
+```{r}
+fish_df <- DBI::dbReadTable(lter_db, "fish_data")
+class(fish_df)
+#now this dataframe is usable like any other with R stuff we already know
+```
+
+#### Query a database using SQL (need to use an SQL code chunk!)
+- SELECT : gets columns
+- FROM : what table in a database to get something from
+- Use * to indicate "get all" 
+
+```{sql connection=lter_db}
+
+SELECT * FROM fish_data
+
+```
+
+
+To get a subset of the columns, we can just list them after 'SELECT', seperated by a comma:
+if you want to connect to the same database in a bunch of different code chunks you can set as a global option using 'connection = (database name)'
+
+```{sql connection=lter_db}
+
+select year, site from fish_data
+
+```
+
+
+We might want to only query for ROWS (observations) that match a given condition we set:
+
+- in R: dplyr::filter()
+- in SQL: WHERE
+
+```{sql connection=lter_db}
+
+select * from fish_data where year == 2016
+
+```
+
+
+Now let's query to keep all columns from fish_data but only if the common_name variable matches "garibaldi":
+```{sql connection=lter_db}
+select common_name, site from fish_data where common_name == "garibaldir"
+```
+
+In dplyr: filter for an and statement: , or &
+SQL: "and"
+
+Example: Query to only keep observations where common_name == "garibaldi" AND site == "mohk"
+```{sql connection=lter_db}
+select * from fish_data where common_name == "garibaldi" and site == "mohk"
+```
+
+
+To write an "or" statement: 
+in R: |, %in%
+in SQL: "or"
+
+Example: Query to keep observations where year is 2017 OR site is "abur"
+
+```{sql connection=lter_db}
+select * from fish_data where year == 2017 or site == "abur"
+```
+
+#### Store an output from SQL querying
+
+add in the code chunk header 'output.var = "name_object"'
+
+```{sql connection=lter_db, output.var = "fish_2017_df"}
+select * from fish_data where year == 2017
+```
+
+#### Query using SQL from an R code chunk
+
+Use 'DBI::dbSendQuery()'
+
+```{r}
+garibaldi <- dbSendQuery(lter_db, "SELECT * FROM fish_data WHERE common_name == 'garibaldi'")
+# R can't do nested double quotes, which is why we used single quote to define common_name to match to
+# query happened but it still doesn't know we want it as a dataframe
+
+gar_df <- dbFetch(garibaldi)
+```
+
+### Query using dplyr-ish code
+
+Use 'dbplyr'
+
+```{r}
+fish_tbl <- tbl(lter_db, "fish_data")
+
+# some wrangling : 
+
+yearly_fish <- fish_tbl %>% 
+  group_by(year) %>% 
+  summarize(
+    total_fish = sum(total_count)
+  )
+# this is still recognized as a SQL type thing, but the table hasn't actually been created yet, if we want to see waht this would look like it SQL :
+
+yearly_fish %>% show_query()
+# this shows the SQL code that you would need to use to do the same thing that we just did in dplyr !!!~!~!!!!!
+
+yearly_fish %>% collect()
+```
+
+
+#### Adding or removing tables from a SQLite database
+
+Use 'DBI::dbWriteTable' and 'DBI::dbRemoveTable' functions to add or remove a table from an existing database (or can use these to create a new database)
+
+```{r}
+dbWriteTable(lter_db, "mtcars_df", mtcars)
+
+# Check to see what tables are in the database now!
+
+DBI::dbListTables(lter_db)
+
+# now we're going to get rid of it
+
+DBI::dbRemoveTable(lter_db, "mtcars_df")
+
+DBI::dbListTables(lter_db)
+```
+
+
+
+
+
+
+
+
+
